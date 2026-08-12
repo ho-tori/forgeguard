@@ -12,3 +12,4 @@ secrets/
 .coverage
 .pytest_cache/
 .package-smoke/
+.worktrees/
