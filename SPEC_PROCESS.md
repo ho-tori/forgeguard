@@ -47,3 +47,27 @@
 
 规格先行迫使安全边界从形容词变成输入、状态和断言，这是有效部分。固定要求“三轮对话”在用户已经做出明确范围决策时可能形式化；可靠证据应是陌生实现者暴露的歧义和相应 diff，而不是补写一段貌似完整的聊天记录。本文件只记录实际发生的过程。
 
+## policy-check 增量功能的真实 brainstorming（2026-08-12）
+
+这是对 policy-check 增量功能的真实 brainstorming，不是对原始项目过程的追溯补写。
+
+本轮在检查现有仓库、`SPEC.md`、CLI、严格 Action parser、`PolicyEngine`、秘密脱敏实现及相关测试后，进行了以下真实问答和人工决策：
+
+1. **Action JSON 的输入方式是什么？**
+   - 决定：同时支持 `--action-json` 和 stdin；两者同时提供时作为输入错误。
+2. **治理结论如何映射 CLI 退出码？**
+   - 决定：`0=allow`、`2=require_approval`、`3=deny`、`4=输入或解析错误`。
+3. **输入含疑似 API key、token 或密码时如何输出？**
+   - 决定：仍完成解析与策略判断，但所有输出统一脱敏，且绝不回显原始 Action。
+4. **允许检查哪些 Action？**
+   - 决定：与现有严格解析器保持一致，支持 `read_file`、`write_file`、`run_command`、`run_feedback`、`remember`、`finish`。
+5. **policy-check 是否读取现有 workspace 和 config？**
+   - 决定：读取 `--workspace` 与 `--config`，仅据此构造 `PolicyEngine`；不初始化 service、审批库、审计、记忆、凭据或工具。
+6. **输入、解析或配置错误如何输出？**
+   - 决定：stdout 输出稳定 JSON，stderr 为空，退出码为 `4`。
+7. **合法 Action 的响应字段是什么？**
+   - 决定：固定为 `verdict`、`reason`、`risk`；没有风险分类时 `risk` 为 `null`，不返回 Action 内容。
+
+在方案比较中，人工批准采用“纯服务函数 + 薄 CLI 适配层”：服务函数只调用 `parse_action()` 和 `PolicyEngine.evaluate()`；CLI 只负责输入、配置、JSON 序列化和退出码。该设计边界明确保证 policy-check 不创建或消费 approval，不调用 `ToolRegistry`，也不执行文件、命令、LLM 或网络动作。
+
+2026-08-12，项目所有者在完成上述真实问答并选择方案 A 后明确批准设计，要求保存设计文档但暂时不要实现。批准后的设计保存在 `docs/superpowers/2026-08-12-policy-check-design.md`；截至本记录更新时尚未开始实现。
