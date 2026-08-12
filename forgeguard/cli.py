@@ -81,6 +81,29 @@ def _emit_policy_check_error(code, error):
     return 4
 
 
+def _validate_policy_check_config(config):
+    if not isinstance(config.workspace, str) or not config.workspace:
+        raise ConfigError("workspace must be a non-empty string")
+    if not isinstance(config.state_dir, str) or not config.state_dir:
+        raise ConfigError("state_dir must be a non-empty string")
+    allowed_commands = config.allowed_commands
+    if (
+        not isinstance(allowed_commands, list)
+        or not allowed_commands
+        or not all(isinstance(command, str) and command for command in allowed_commands)
+    ):
+        raise ConfigError("allowed_commands must be a non-empty string array")
+
+
+def _validate_policy_check_action_name(raw_action):
+    try:
+        value = json.loads(raw_action)
+    except (TypeError, ValueError):
+        return
+    if isinstance(value, dict) and "action" in value and not isinstance(value["action"], str):
+        raise ActionParseError("action must be a string")
+
+
 def _run_policy_check(args):
     try:
         raw_action = _read_policy_check_input(args.action_json, sys.stdin)
@@ -88,6 +111,10 @@ def _run_policy_check(args):
         return _emit_policy_check_error("invalid_input", exc)
     try:
         config = load_config(args.config, workspace=args.workspace)
+    except (AttributeError, ConfigError, TypeError) as exc:
+        return _emit_policy_check_error("invalid_config", exc)
+    try:
+        _validate_policy_check_config(config)
         policy = PolicyEngine(
             config.workspace,
             config.allowed_commands,
@@ -96,8 +123,9 @@ def _run_policy_check(args):
     except (ConfigError, TypeError) as exc:
         return _emit_policy_check_error("invalid_config", exc)
     try:
+        _validate_policy_check_action_name(raw_action)
         payload = check_policy(raw_action, policy)
-    except (ActionParseError, TypeError) as exc:
+    except ActionParseError as exc:
         return _emit_policy_check_error("invalid_action", exc)
     print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
     return POLICY_CHECK_EXIT_CODES[payload["verdict"]]

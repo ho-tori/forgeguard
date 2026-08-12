@@ -149,6 +149,34 @@ class CliPolicyCheckTests(unittest.TestCase):
                 self.assertEqual(len(raw_stdout.splitlines()), 1)
                 self.assertEqual(stderr, "")
 
+    def test_allowed_command_shape_errors_are_invalid_config_json(self):
+        cases = (
+            (
+                "numeric-command.json",
+                {"allowed_commands": [1]},
+                '{"action":"run_command","arguments":{"argv":["git","status"]}}',
+            ),
+            (
+                "string-commands.json",
+                {"allowed_commands": "git"},
+                '{"action":"finish","arguments":{"summary":"ok"}}',
+            ),
+        )
+        for filename, config, raw_action in cases:
+            with self.subTest(filename=filename):
+                config_path = os.path.join(self.temp.name, filename)
+                with open(config_path, "w", encoding="utf-8") as handle:
+                    json.dump(config, handle)
+                code, payload, raw_stdout, stderr = self.run_cli(
+                    ["policy-check", "--action-json", raw_action],
+                    global_args=["--config", config_path],
+                )
+                self.assertEqual(code, 4)
+                self.assertEqual(set(payload), {"error", "message"})
+                self.assertEqual(payload["error"], "invalid_config")
+                self.assertEqual(len(raw_stdout.splitlines()), 1)
+                self.assertEqual(stderr, "")
+
     def test_config_parity_and_policy_check_never_initialize_or_execute(self):
         config_path = os.path.join(self.temp.name, "policy.json")
         with open(config_path, "w", encoding="utf-8") as handle:
