@@ -882,7 +882,7 @@ if ($unexpectedCredentials.Count -ne 0) {
   throw "unexpected credential-like value outside explicit test/plan fixtures"
 }
 
-$exampleHits = @(git grep -n -I -E 'YOUR_[A-Z0-9_]+' -- . ':(exclude)docs/superpowers/2026-08-12-policy-check-plan.md')
+$exampleHits = @(git grep -n -I -E 'YOUR_[A-Z0-9_]+' -- . ':(exclude)docs/superpowers/2026-08-12-policy-check-plan.md' ':(exclude)AGENT_LOG.md')
 $unexpectedExamples = @($exampleHits | Where-Object {
   $_ -notmatch '^README\.md:.*YOUR_PROVIDER_KEY'
 })
@@ -892,7 +892,7 @@ if ($unexpectedExamples.Count -ne 0) {
 }
 ```
 
-Expected: credential-like values occur only in named deterministic test/plan fixtures; this plan file is excluded from its self-referential marker scan, so the only remaining `YOUR_...` example is README's documented `YOUR_PROVIDER_KEY`.
+Expected: credential-like values occur only in named deterministic test/plan fixtures; this plan file and `AGENT_LOG.md` are excluded because they are evidence/self-reference documents that carry the scan command itself rather than product/example surfaces. README and every other tracked file remain scanned, so the only remaining `YOUR_...` example is README's documented `YOUR_PROVIDER_KEY`.
 
 - [ ] **Micro-task 5 (2–5 min): Record only observed evidence in AGENT_LOG.md**
 
