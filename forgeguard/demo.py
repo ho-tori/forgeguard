@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 import json
 import os
 import sys
@@ -18,9 +19,14 @@ def _reply(action, **arguments):
     return json.dumps({"action": action, "arguments": arguments})
 
 
-def run_demo(stream=None):
+def run_demo(stream=None, workspace=None, marker_path=None):
     stream = stream or sys.stdout
-    with tempfile.TemporaryDirectory(prefix="forgeguard-demo-") as workspace:
+    workspace_context = (
+        tempfile.TemporaryDirectory(prefix="forgeguard-demo-")
+        if workspace is None
+        else nullcontext(workspace)
+    )
+    with workspace_context as workspace:
         executable = sys.executable
         policy = PolicyEngine(workspace, ["git", executable, os.path.basename(executable)])
         memory = MemoryStore(os.path.join(workspace, ".forgeguard", "memory.db"))
@@ -90,15 +96,15 @@ def run_demo(stream=None):
         )
         verification = audit.verify()
         _emit(stream, "4_audit", {"ok": verification.ok, "records": verification.records})
-        marker_name = "policy-check-marker.txt"
-        marker_path = os.path.join(workspace, marker_name)
+        marker_path = marker_path or os.path.join(workspace, "policy-check-marker.txt")
+        marker_path = os.path.abspath(marker_path)
         checked = check_policy(
             _reply(
                 "run_command",
                 argv=[
                     executable,
                     "-c",
-                    "open(%r, 'w').write('executed')" % marker_name,
+                    "open(%r, 'w').write('executed')" % marker_path,
                 ],
             ),
             policy,
