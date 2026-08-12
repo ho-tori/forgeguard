@@ -10,6 +10,7 @@ from .llm import MockLLM
 from .memory import MemoryStore
 from .models import Action
 from .policy import PolicyEngine
+from .policy_check import check_policy
 from .tools import ToolRegistry
 
 
@@ -89,6 +90,29 @@ def run_demo(stream=None):
         )
         verification = audit.verify()
         _emit(stream, "4_audit", {"ok": verification.ok, "records": verification.records})
+        marker_name = "policy-check-marker.txt"
+        marker_path = os.path.join(workspace, marker_name)
+        checked = check_policy(
+            _reply(
+                "run_command",
+                argv=[
+                    executable,
+                    "-c",
+                    "open(%r, 'w').write('executed')" % marker_name,
+                ],
+            ),
+            policy,
+        )
+        side_effect_free = not os.path.exists(marker_path)
+        _emit(
+            stream,
+            "5_policy_check",
+            {
+                "verdict": checked["verdict"],
+                "risk": checked["risk"],
+                "side_effect_free": side_effect_free,
+            },
+        )
         memory.close()
         return bool(
             waiting.state == "awaiting_approval"
@@ -98,6 +122,9 @@ def run_demo(stream=None):
             and result.state == "completed"
             and next_turn_saw_failure
             and verification.ok
+            and checked["verdict"] == "require_approval"
+            and checked["risk"] == "arbitrary_code"
+            and side_effect_free
         )
 
 
