@@ -49,7 +49,7 @@ python -m forgeguard --workspace . policy-check --action-json '{"action":"run_co
 {"reason": "Constrained git status is read-only", "risk": null, "verdict": "allow"}
 ```
 
-退出码：`0=allow`、`2=require_approval`、`3=deny`、`4=输入、Action 解析或配置错误`。错误也只在 stdout 输出 JSON，stderr 为空。命令可读取 `--config` 中的工作区、状态目录和命令白名单设置，但不需要 API key、LLM 或网络。
+退出码：`0=allow`、`2=require_approval`、`3=deny`、`4=输入、Action 解析或配置错误`。错误也只在 stdout 输出 JSON，stderr 为空。命令读取全局 `--workspace`，并读取 `--config` 中的状态目录和命令白名单设置，但不需要 API key、LLM 或网络。
 
 确定性机制演示的 `5_policy_check` 事件使用一个若执行就会创建文件的 Python Action，并证明结果为 `require_approval` 且文件未创建：
 
