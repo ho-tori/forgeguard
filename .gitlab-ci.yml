@@ -1,0 +1,29 @@
+stages:
+  - test
+  - package
+
+unit-test:
+  stage: test
+  image: python:3.11-alpine
+  script:
+    - python -m unittest discover -s tests -v
+    - python -m forgeguard demo
+
+package-smoke:
+  stage: package
+  image: python:3.11-alpine
+  script:
+    - python -m pip install --no-deps .
+    - forgeguard demo
+
+docker-build:
+  stage: package
+  image: docker:27-cli
+  services:
+    - name: docker:27-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  script:
+    - docker build -t forgeguard:${CI_COMMIT_SHA} .
+

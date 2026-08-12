@@ -1,0 +1,14 @@
+.git
+.forgeguard
+__pycache__
+*.py[cod]
+.env
+.env.*
+*secret*
+tests
+dist
+build
+*.egg-info
+submission.jsonc
+AI4SE*
+

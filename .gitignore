@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.forgeguard/
+.env
+.env.*
+*.key
+*.pem
+secrets/
+.coverage
+.pytest_cache/
+.package-smoke/

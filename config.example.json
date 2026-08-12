@@ -1,0 +1,14 @@
+{
+  "endpoint": "https://api.openai.com/v1/chat/completions",
+  "model": "gpt-5-mini",
+  "max_steps": 12,
+  "command_timeout": 60,
+  "allowed_commands": ["python", "python3", "git"],
+  "feedback_checks": {
+    "unit": ["python", "-m", "unittest", "discover", "-s", "tests", "-v"]
+  },
+  "require_feedback": true,
+  "bind": "127.0.0.1",
+  "port": 8080
+}
+
