@@ -117,6 +117,38 @@ class CliPolicyCheckTests(unittest.TestCase):
         self.assertEqual(payload["error"], "invalid_config")
         self.assertEqual(stderr, "")
 
+    def test_non_hashable_action_name_is_invalid_action_json(self):
+        raw = json.dumps({"action": [], "arguments": {}})
+        code, payload, raw_stdout, stderr = self.run_cli(
+            ["policy-check", "--action-json", raw]
+        )
+        self.assertEqual(code, 4)
+        self.assertEqual(set(payload), {"error", "message"})
+        self.assertEqual(payload["error"], "invalid_action")
+        self.assertEqual(len(raw_stdout.splitlines()), 1)
+        self.assertEqual(stderr, "")
+
+    def test_config_type_errors_are_invalid_config_json(self):
+        cases = (
+            ("null-state.json", {"state_dir": None}),
+            ("nested-command.json", {"allowed_commands": [["git"]]}),
+        )
+        raw = '{"action":"finish","arguments":{"summary":"ok"}}'
+        for filename, config in cases:
+            with self.subTest(filename=filename):
+                config_path = os.path.join(self.temp.name, filename)
+                with open(config_path, "w", encoding="utf-8") as handle:
+                    json.dump(config, handle)
+                code, payload, raw_stdout, stderr = self.run_cli(
+                    ["policy-check", "--action-json", raw],
+                    global_args=["--config", config_path],
+                )
+                self.assertEqual(code, 4)
+                self.assertEqual(set(payload), {"error", "message"})
+                self.assertEqual(payload["error"], "invalid_config")
+                self.assertEqual(len(raw_stdout.splitlines()), 1)
+                self.assertEqual(stderr, "")
+
     def test_config_parity_and_policy_check_never_initialize_or_execute(self):
         config_path = os.path.join(self.temp.name, "policy.json")
         with open(config_path, "w", encoding="utf-8") as handle:

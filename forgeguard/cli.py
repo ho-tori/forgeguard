@@ -88,16 +88,16 @@ def _run_policy_check(args):
         return _emit_policy_check_error("invalid_input", exc)
     try:
         config = load_config(args.config, workspace=args.workspace)
-    except ConfigError as exc:
+        policy = PolicyEngine(
+            config.workspace,
+            config.allowed_commands,
+            protected_paths=[config.state_dir],
+        )
+    except (ConfigError, TypeError) as exc:
         return _emit_policy_check_error("invalid_config", exc)
-    policy = PolicyEngine(
-        config.workspace,
-        config.allowed_commands,
-        protected_paths=[config.state_dir],
-    )
     try:
         payload = check_policy(raw_action, policy)
-    except ActionParseError as exc:
+    except (ActionParseError, TypeError) as exc:
         return _emit_policy_check_error("invalid_action", exc)
     print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
     return POLICY_CHECK_EXIT_CODES[payload["verdict"]]
