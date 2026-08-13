@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 import json
 import os
 import sys
@@ -10,6 +11,7 @@ from .llm import MockLLM
 from .memory import MemoryStore
 from .models import Action
 from .policy import PolicyEngine
+from .policy_check import check_policy
 from .tools import ToolRegistry
 
 
@@ -17,9 +19,14 @@ def _reply(action, **arguments):
     return json.dumps({"action": action, "arguments": arguments})
 
 
-def run_demo(stream=None):
+def run_demo(stream=None, workspace=None, marker_path=None):
     stream = stream or sys.stdout
-    with tempfile.TemporaryDirectory(prefix="forgeguard-demo-") as workspace:
+    workspace_context = (
+        tempfile.TemporaryDirectory(prefix="forgeguard-demo-")
+        if workspace is None
+        else nullcontext(workspace)
+    )
+    with workspace_context as workspace:
         executable = sys.executable
         policy = PolicyEngine(workspace, ["git", executable, os.path.basename(executable)])
         memory = MemoryStore(os.path.join(workspace, ".forgeguard", "memory.db"))
@@ -89,6 +96,29 @@ def run_demo(stream=None):
         )
         verification = audit.verify()
         _emit(stream, "4_audit", {"ok": verification.ok, "records": verification.records})
+        marker_path = marker_path or os.path.join(workspace, "policy-check-marker.txt")
+        marker_path = os.path.abspath(marker_path)
+        checked = check_policy(
+            _reply(
+                "run_command",
+                argv=[
+                    executable,
+                    "-c",
+                    "open(%r, 'w').write('executed')" % marker_path,
+                ],
+            ),
+            policy,
+        )
+        side_effect_free = not os.path.exists(marker_path)
+        _emit(
+            stream,
+            "5_policy_check",
+            {
+                "verdict": checked["verdict"],
+                "risk": checked["risk"],
+                "side_effect_free": side_effect_free,
+            },
+        )
         memory.close()
         return bool(
             waiting.state == "awaiting_approval"
@@ -98,6 +128,9 @@ def run_demo(stream=None):
             and result.state == "completed"
             and next_turn_saw_failure
             and verification.ok
+            and checked["verdict"] == "require_approval"
+            and checked["risk"] == "arbitrary_code"
+            and side_effect_free
         )
 
 

@@ -27,6 +27,36 @@ python -m unittest discover -s tests -v
 
 支持 Python 3.7+，测试不访问网络，也不需要真实凭据。
 
+## 只判断策略，不执行动作
+
+`policy-check` 严格解析一个 Action JSON，并只返回现有 `PolicyEngine` 的治理判断。它不会执行文件写入、命令或反馈检查，不会创建或消费 approval，也不会初始化审计、记忆、凭据、LLM 或网络客户端。
+
+通过参数传入：
+
+```powershell
+python -m forgeguard --workspace . policy-check --action-json '{"action":"run_command","arguments":{"argv":["git","status","--short"]}}'
+```
+
+或通过重定向 stdin 传入：
+
+```powershell
+'{"action":"read_file","arguments":{"path":"README.md"}}' | python -m forgeguard --workspace . policy-check
+```
+
+成功解析的 stdout 固定包含 `verdict`、`reason` 和 `risk`：
+
+```json
+{"reason": "Constrained git status is read-only", "risk": null, "verdict": "allow"}
+```
+
+退出码：`0=allow`、`2=require_approval`、`3=deny`、`4=输入、Action 解析或配置错误`。错误也只在 stdout 输出 JSON，stderr 为空。命令读取全局 `--workspace`，并读取 `--config` 中的状态目录和命令白名单设置，但不需要 API key、LLM 或网络。
+
+确定性机制演示的 `5_policy_check` 事件使用一个若执行就会创建文件的 Python Action，并证明结果为 `require_approval` 且文件未创建：
+
+```powershell
+python -m forgeguard demo
+```
+
 ## 安装
 
 ### 源码运行

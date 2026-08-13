@@ -7,6 +7,10 @@ import sys
 from .config import ConfigError, load_config
 from .credentials import CredentialError, CredentialManager
 from .demo import run_demo
+from .memory import redact_secrets
+from .parser import ActionParseError
+from .policy import PolicyEngine
+from .policy_check import check_policy
 from .service import ForgeGuardService
 from .web import create_server
 
@@ -24,6 +28,9 @@ def build_parser():
     serve.add_argument("--bind", help="Override configured bind address")
     serve.add_argument("--port", type=int, help="Override configured port")
     serve.add_argument("--admin-token-file", help="Required for non-loopback binding; mode 600 on POSIX")
+
+    policy_check = commands.add_parser("policy-check", help="Check policy without executing an Action")
+    policy_check.add_argument("--action-json", help="Strict Action JSON; reads redirected stdin when omitted")
 
     credential = commands.add_parser("credential", help="Manage the provider credential")
     credential.add_argument("operation", choices=["set", "status", "clear"])
@@ -46,6 +53,84 @@ def _read_token(path):
     return value
 
 
+POLICY_CHECK_EXIT_CODES = {"allow": 0, "require_approval": 2, "deny": 3}
+
+
+def _read_policy_check_input(action_json, stdin):
+    try:
+        terminal = bool(getattr(stdin, "isatty", lambda: False)())
+    except OSError:
+        terminal = False
+    redirected = "" if terminal else stdin.read()
+    option_provided = action_json is not None
+    stdin_provided = bool(redirected.strip())
+    if option_provided and stdin_provided:
+        raise ValueError("Provide Action JSON using either --action-json or stdin, not both")
+    raw_action = action_json if option_provided else redirected
+    if not isinstance(raw_action, str) or not raw_action.strip():
+        raise ValueError("Action JSON must be provided using --action-json or redirected stdin")
+    return raw_action
+
+
+def _emit_policy_check_error(code, error):
+    payload = {
+        "error": redact_secrets(code),
+        "message": redact_secrets(str(error)),
+    }
+    print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+    return 4
+
+
+def _validate_policy_check_config(config):
+    if not isinstance(config.workspace, str) or not config.workspace:
+        raise ConfigError("workspace must be a non-empty string")
+    if not isinstance(config.state_dir, str) or not config.state_dir:
+        raise ConfigError("state_dir must be a non-empty string")
+    allowed_commands = config.allowed_commands
+    if (
+        not isinstance(allowed_commands, list)
+        or not allowed_commands
+        or not all(isinstance(command, str) and command for command in allowed_commands)
+    ):
+        raise ConfigError("allowed_commands must be a non-empty string array")
+
+
+def _validate_policy_check_action_name(raw_action):
+    try:
+        value = json.loads(raw_action)
+    except (TypeError, ValueError):
+        return
+    if isinstance(value, dict) and "action" in value and not isinstance(value["action"], str):
+        raise ActionParseError("action must be a string")
+
+
+def _run_policy_check(args):
+    try:
+        raw_action = _read_policy_check_input(args.action_json, sys.stdin)
+    except (OSError, ValueError) as exc:
+        return _emit_policy_check_error("invalid_input", exc)
+    try:
+        config = load_config(args.config, workspace=args.workspace)
+    except (AttributeError, ConfigError, TypeError) as exc:
+        return _emit_policy_check_error("invalid_config", exc)
+    try:
+        _validate_policy_check_config(config)
+        policy = PolicyEngine(
+            config.workspace,
+            config.allowed_commands,
+            protected_paths=[config.state_dir],
+        )
+    except (ConfigError, TypeError) as exc:
+        return _emit_policy_check_error("invalid_config", exc)
+    try:
+        _validate_policy_check_action_name(raw_action)
+        payload = check_policy(raw_action, policy)
+    except ActionParseError as exc:
+        return _emit_policy_check_error("invalid_action", exc)
+    print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+    return POLICY_CHECK_EXIT_CODES[payload["verdict"]]
+
+
 def main(argv=None):
     args = build_parser().parse_args(argv)
     if not args.command:
@@ -54,6 +139,8 @@ def main(argv=None):
     try:
         if args.command == "demo":
             return 0 if run_demo() else 1
+        if args.command == "policy-check":
+            return _run_policy_check(args)
         credentials = CredentialManager()
         if args.command == "credential":
             if args.operation == "set":
